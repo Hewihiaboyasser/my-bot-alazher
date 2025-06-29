@@ -18,6 +18,12 @@ bot_active = True
 
 # أمر /start
 @bot.message_handler(commands=['start'])
+# التعامل مع زر الرجوع
+@bot.message_handler(func=lambda message: message.text == "رجوع ⬅️ BACK")
+def go_back(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📚 الدروس", "☎️ تواصل معنا")
+    bot.send_message(message.chat.id, "تم الرجوع إلى القائمة الرئيسية ⬅️", reply_markup=markup)
 def start(message):
     global users
     if message.chat.id in banned_users:
