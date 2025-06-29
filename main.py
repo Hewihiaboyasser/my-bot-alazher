@@ -1,111 +1,175 @@
 
 import telebot
 from telebot import types
+import json
+import os
 
-# توكن البوت
-TOKEN = '7670747634:AAHz1_yih0s8DeeiwRNIlNL2GDk9d9fdfpw'
+# التوكن الخاص بالبوت
+TOKEN = '7850057458:AAGs-sL_rvj4ntvzVLCmN-GdqG1Qw5AS0po'
 bot = telebot.TeleBot(TOKEN)
 
-# آيدي الأدمن
+# معرف الأدمن (Telegram user ID)
 ADMIN_ID = 1768016876
 
-# تخزين المستخدمين والمحظورين
-users = set()
-banned_users = set()
+# ملفات البيانات
+MENU_FILE = 'menu.json'
+USERS_FILE = 'users.json'
+BANNED_FILE = 'banned.json'
 
-# حالة البوت (شغال أو لا)
+# تحميل البيانات من الملفات
+def load_data(file, default):
+    if os.path.exists(file):
+        with open(file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return default
+
+# حفظ البيانات إلى الملفات
+def save_data(file, data):
+    with open(file, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+# تحميل القوائم والمستخدمين والحظر
+menu = load_data(MENU_FILE, {})
+users = load_data(USERS_FILE, [])
+banned = load_data(BANNED_FILE, [])
+
+# حالة البوت
 bot_active = True
+
+# عرض قائمة حسب المسار
+def build_menu(path):
+    parts = path.strip().split('/')
+    current = menu
+    for part in parts:
+        if part in current:
+            current = current[part]
+        else:
+            return types.InlineKeyboardMarkup(), {}
+    markup = types.InlineKeyboardMarkup()
+    for key in current:
+        markup.add(types.InlineKeyboardButton(key, callback_data=path + '/' + key))
+    if path != '':
+        markup.add(types.InlineKeyboardButton("🔙 رجوع", callback_data='/'.join(parts[:-1])))
+    return markup, current
 
 # أمر /start
 @bot.message_handler(commands=['start'])
-# التعامل مع زر الرجوع
-@bot.message_handler(func=lambda message: message.text == "رجوع ⬅️ BACK")
-def go_back(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📚 الدروس", "☎️ تواصل معنا")
-    bot.send_message(message.chat.id, "تم الرجوع إلى القائمة الرئيسية ⬅️", reply_markup=markup)
 def start(message):
-    global users
-    if message.chat.id in banned_users:
+    if message.chat.id in banned:
         return
-    users.add(message.chat.id)
+    if message.chat.id not in users:
+        users.append(message.chat.id)
+        save_data(USERS_FILE, users)
+    markup, _ = build_menu('')
+    bot.send_message(message.chat.id, "✨ مرحبًا بك في البوت التعليمي", reply_markup=markup)
 
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📚 الدروس", "📞 تواصل معنا")
+# التعامل مع الضغط على الأزرار
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    if call.message.chat.id in banned:
+        return
+    path = call.data
+    markup, _ = build_menu(path)
+    bot.edit_message_text(f"📂 القائمة: {path or 'الرئيسية'}", call.message.chat.id, call.message.message_id, reply_markup=markup)
+
+# إضافة زر
+@bot.message_handler(commands=['add'])
+def add_button(message):
+    if message.chat.id != ADMIN_ID:
+        return
+    bot.send_message(message.chat.id, "📍 أرسل المسار الذي تريد الإضافة فيه (مثال: الدروس 📚/المستوى الأول 🧱):")
+    bot.register_next_step_handler(message, get_add_path)
+
+def get_add_path(message):
+    path = message.text.strip()
+    bot.send_message(message.chat.id, "📝 أرسل اسم الزر الجديد:")
+    bot.register_next_step_handler(message, lambda m: finish_add(path, m))
+
+def finish_add(path, message):
+    name = message.text.strip()
+    parts = path.strip().split('/')
+    current = menu
+    for part in parts:
+        current = current.setdefault(part, {})
+    current[name] = {}
+    save_data(MENU_FILE, menu)
+    bot.send_message(message.chat.id, f"✅ تم إضافة الزر '{name}' إلى '{path}'.")
+
+# إرسال نشرة
+@bot.message_handler(commands=['broadcast'])
+def broadcast(message):
+    if message.chat.id != ADMIN_ID:
+        return
+    bot.send_message(message.chat.id, "✍️ أرسل الرسالة التي تريد إرسالها للجميع:")
+    bot.register_next_step_handler(message, send_broadcast)
+
+def send_broadcast(message):
+    count = 0
+    for user in users:
+        try:
+            bot.send_message(user, f"📢 {message.text}")
+            count += 1
+        except:
+            continue
+    bot.send_message(message.chat.id, f"📬 تم إرسال النشرة إلى {count} عضو.")
+
+# حظر عضو
+@bot.message_handler(commands=['ban'])
+def ban_user(message):
+    if message.chat.id != ADMIN_ID:
+        return
+    bot.send_message(message.chat.id, "🚫 أرسل ID العضو الذي تريد حظره:")
+    bot.register_next_step_handler(message, finish_ban)
+
+def finish_ban(message):
+    try:
+        uid = int(message.text.strip())
+        if uid not in banned:
+            banned.append(uid)
+            save_data(BANNED_FILE, banned)
+            bot.send_message(message.chat.id, f"🚫 تم حظر العضو {uid}")
+    except:
+        bot.send_message(message.chat.id, "❌ خطأ في ID")
+
+# فك الحظر
+@bot.message_handler(commands=['unban'])
+def unban_user(message):
+    if message.chat.id != ADMIN_ID:
+        return
+    bot.send_message(message.chat.id, "✅ أرسل ID العضو لفك الحظر:")
+    bot.register_next_step_handler(message, finish_unban)
+
+def finish_unban(message):
+    try:
+        uid = int(message.text.strip())
+        if uid in banned:
+            banned.remove(uid)
+            save_data(BANNED_FILE, banned)
+            bot.send_message(message.chat.id, f"✅ تم فك الحظر عن العضو {uid}")
+    except:
+        bot.send_message(message.chat.id, "❌ خطأ في ID")
+
+# عدد المستخدمين
+@bot.message_handler(commands=['users'])
+def count_users(message):
     if message.chat.id == ADMIN_ID:
-        markup.add("➕ إضافة زر", "📢 نشرة", "🚫 حظر", "⛔ إيقاف البوت", "✅ تشغيل البوت")
-    bot.send_message(message.chat.id, "✨ أهلاً بك في البوت التعليمي", reply_markup=markup)
+        bot.send_message(message.chat.id, f"👥 عدد الأعضاء: {len(users)}")
 
-# التعامل مع الرسائل
-@bot.message_handler(func=lambda message: True)
-def handle_message(message):
+# إيقاف وتشغيل البوت
+@bot.message_handler(commands=['stopbot'])
+def stop_bot(message):
     global bot_active
-
-    if message.chat.id in banned_users:
-        return
-
-    if not bot_active and message.chat.id != ADMIN_ID:
-        bot.send_message(message.chat.id, "🚫 البوت متوقف حالياً.")
-        return
-
-    text = message.text.strip()
-
-    if text == "📚 الدروس":
-        bot.send_message(message.chat.id, "📘 اختر المستوى:\n1️⃣ المستوى الأول\n2️⃣ المستوى الثاني")
-
-    elif text == "📞 تواصل معنا":
-        bot.send_message(message.chat.id, "📧 للتواصل معنا: example@email.com")
-
-    elif text == "➕ إضافة زر" and message.chat.id == ADMIN_ID:
-        msg = bot.send_message(message.chat.id, "✏️ أرسل اسم الزر الجديد:")
-        bot.register_next_step_handler(msg, add_button)
-
-    elif text == "📢 نشرة" and message.chat.id == ADMIN_ID:
-        msg = bot.send_message(message.chat.id, "✍️ أرسل محتوى النشرة:")
-        bot.register_next_step_handler(msg, broadcast)
-
-    elif text == "🚫 حظر" and message.chat.id == ADMIN_ID:
-        msg = bot.send_message(message.chat.id, "🔒 أرسل ID المستخدم الذي تريد حظره:")
-        bot.register_next_step_handler(msg, ban_user)
-
-    elif text == "⛔ إيقاف البوت" and message.chat.id == ADMIN_ID:
+    if message.chat.id == ADMIN_ID:
         bot_active = False
         bot.send_message(message.chat.id, "⛔ تم إيقاف البوت.")
 
-    elif text == "✅ تشغيل البوت" and message.chat.id == ADMIN_ID:
+@bot.message_handler(commands=['startbot'])
+def start_bot(message):
+    global bot_active
+    if message.chat.id == ADMIN_ID:
         bot_active = True
-        bot.send_message(message.chat.id, "✅ تم تفعيل البوت.")
+        bot.send_message(message.chat.id, "✅ تم تشغيل البوت.")
 
-# إضافة زر ديناميكي
-def add_button(message):
-    new_btn = message.text.strip()
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📚 الدروس", "📞 تواصل معنا", new_btn)
-    markup.add("🔙 رجوع")
-    bot.send_message(message.chat.id, f"✅ تم إضافة الزر: {new_btn}", reply_markup=markup)
-
-# إرسال نشرة جماعية
-def broadcast(message):
-    text = message.text
-    success = 0
-    fail = 0
-    for user in users:
-        try:
-            bot.send_message(user, f"📢 {text}")
-            success += 1
-        except:
-            fail += 1
-    bot.send_message(message.chat.id, f"📬 تم الإرسال إلى {success} عضو (فشل إلى {fail})")
-
-# حظر مستخدم
-def ban_user(message):
-    try:
-        user_id = int(message.text.strip())
-        banned_users.add(user_id)
-        bot.send_message(message.chat.id, f"🚫 تم حظر العضو: {user_id}")
-    except:
-        bot.send_message(message.chat.id, "❌ المعرف غير صحيح.")
-
-# تشغيل البوت
+# بدء التشغيل
 print("✅ البوت يعمل الآن...")
-bot.infinity_polling()
+bot.infinity_polling() 
