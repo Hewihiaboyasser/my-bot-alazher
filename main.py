@@ -5,7 +5,7 @@ import json
 import os
 
 # التوكن الخاص بالبوت
-TOKEN = '7850057458:AAGs-sL_rvj4ntvzVLCmN-GdqG1Qw5AS0po'
+TOKEN = '7330419004:AAFlsAG1TuClNAJTMazWZmCWcfFGPjPhpfQ'
 bot = telebot.TeleBot(TOKEN)
 
 # معرف الأدمن (Telegram user ID)
