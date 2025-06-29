@@ -1,3 +1,4 @@
+
 import telebot
 from telebot import types
 
@@ -8,95 +9,96 @@ bot = telebot.TeleBot(TOKEN)
 # آيدي الأدمن
 ADMIN_ID = 1768016876
 
-# قائمة الأعضاء (لتجربة النشرة)
+# تخزين المستخدمين والمحظورين
 users = set()
+banned_users = set()
 
-# حالة البوت (مفعل/معطل)
+# حالة البوت (شغال أو لا)
 bot_active = True
 
-# استقبال /start
+# أمر /start
 @bot.message_handler(commands=['start'])
 def start(message):
     global users
+    if message.chat.id in banned_users:
+        return
     users.add(message.chat.id)
 
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add("📚 الدروس", "☎️ تواصل معنا")
-    if message.from_user.id == ADMIN_ID:
-        markup.add("⚙️ لوحة التحكم")
-    bot.send_message(message.chat.id, "🌟 أهلاً بك في البوت التعليمي", reply_markup=markup)
+    markup.add("📚 الدروس", "📞 تواصل معنا")
+    if message.chat.id == ADMIN_ID:
+        markup.add("➕ إضافة زر", "📢 نشرة", "🚫 حظر", "⛔ إيقاف البوت", "✅ تشغيل البوت")
+    bot.send_message(message.chat.id, "✨ أهلاً بك في البوت التعليمي", reply_markup=markup)
 
-# استقبال الأوامر من الجميع
+# التعامل مع الرسائل
 @bot.message_handler(func=lambda message: True)
-def handle_all(message):
+def handle_message(message):
     global bot_active
-    if not bot_active and message.from_user.id != ADMIN_ID:
-        bot.send_message(message.chat.id, "❌ البوت متوقف حالياً.")
+
+    if message.chat.id in banned_users:
         return
 
-    if message.text == "📚 الدروس":
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add("📘 المستوى الأول", "📙 المستوى الثاني")
-        markup.add("🔙 رجوع")
-        bot.send_message(message.chat.id, "يرجى اختيار المستوى:", reply_markup=markup)
+    if not bot_active and message.chat.id != ADMIN_ID:
+        bot.send_message(message.chat.id, "🚫 البوت متوقف حالياً.")
+        return
 
-    elif message.text == "📘 المستوى الأول":
-        bot.send_message(message.chat.id, "📘 هنا محتوى المستوى الأول.")
+    text = message.text.strip()
 
-    elif message.text == "📙 المستوى الثاني":
-        bot.send_message(message.chat.id, "📙 هنا محتوى المستوى الثاني.")
+    if text == "📚 الدروس":
+        bot.send_message(message.chat.id, "📘 اختر المستوى:\n1️⃣ المستوى الأول\n2️⃣ المستوى الثاني")
 
-    elif message.text == "📞 تواصل معنا":
-        bot.send_message(message.chat.id, "للتواصل معنا: example@email.com")
+    elif text == "📞 تواصل معنا":
+        bot.send_message(message.chat.id, "📧 للتواصل معنا: example@email.com")
 
-    elif message.text == "🔙 رجوع":
-        start(message)
+    elif text == "➕ إضافة زر" and message.chat.id == ADMIN_ID:
+        msg = bot.send_message(message.chat.id, "✏️ أرسل اسم الزر الجديد:")
+        bot.register_next_step_handler(msg, add_button)
 
-    elif message.text == "⚙️ لوحة التحكم" and message.from_user.id == ADMIN_ID:
-        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add("➕ إضافة زر", "📢 إرسال نشرة")
-        markup.add("🚫 حظر عضو", "🔁 إيقاف / تشغيل البوت")
-        markup.add("🔙 رجوع")
-        bot.send_message(message.chat.id, "لوحة التحكم:", reply_markup=markup)
+    elif text == "📢 نشرة" and message.chat.id == ADMIN_ID:
+        msg = bot.send_message(message.chat.id, "✍️ أرسل محتوى النشرة:")
+        bot.register_next_step_handler(msg, broadcast)
 
-    elif message.text == "➕ إضافة زر" and message.from_user.id == ADMIN_ID:
-        bot.send_message(message.chat.id, "أرسل اسم الزر الجديد:")
+    elif text == "🚫 حظر" and message.chat.id == ADMIN_ID:
+        msg = bot.send_message(message.chat.id, "🔒 أرسل ID المستخدم الذي تريد حظره:")
+        bot.register_next_step_handler(msg, ban_user)
 
-        @bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID)
-        def add_btn(msg):
-            btn = msg.text
-            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-            markup.add(btn, "🔙 رجوع")
-            bot.send_message(msg.chat.id, f"✅ تم إضافة الزر: {btn}", reply_markup=markup)
+    elif text == "⛔ إيقاف البوت" and message.chat.id == ADMIN_ID:
+        bot_active = False
+        bot.send_message(message.chat.id, "⛔ تم إيقاف البوت.")
 
-    elif message.text == "📢 إرسال نشرة" and message.from_user.id == ADMIN_ID:
-        bot.send_message(message.chat.id, "✏️ أرسل محتوى النشرة الآن:")
+    elif text == "✅ تشغيل البوت" and message.chat.id == ADMIN_ID:
+        bot_active = True
+        bot.send_message(message.chat.id, "✅ تم تفعيل البوت.")
 
-        @bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID)
-        def broadcast(msg):
-            for user in users:
-                try:
-                    bot.send_message(user, msg.text)
-                except:
-                    pass
-            bot.send_message(msg.chat.id, "✅ تم إرسال النشرة.")
+# إضافة زر ديناميكي
+def add_button(message):
+    new_btn = message.text.strip()
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add("📚 الدروس", "📞 تواصل معنا", new_btn)
+    markup.add("🔙 رجوع")
+    bot.send_message(message.chat.id, f"✅ تم إضافة الزر: {new_btn}", reply_markup=markup)
 
-    elif message.text == "🚫 حظر عضو" and message.from_user.id == ADMIN_ID:
-        bot.send_message(message.chat.id, "🔒 أرسل ID العضو المراد حظره:")
+# إرسال نشرة جماعية
+def broadcast(message):
+    text = message.text
+    success = 0
+    fail = 0
+    for user in users:
+        try:
+            bot.send_message(user, f"📢 {text}")
+            success += 1
+        except:
+            fail += 1
+    bot.send_message(message.chat.id, f"📬 تم الإرسال إلى {success} عضو (فشل إلى {fail})")
 
-        @bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID)
-        def block_user(msg):
-            uid = int(msg.text)
-            if uid in users:
-                users.remove(uid)
-                bot.send_message(msg.chat.id, f"🚫 تم حظر العضو {uid}")
-            else:
-                bot.send_message(msg.chat.id, "هذا العضو غير موجود في القائمة.")
-
-    elif message.text == "🔁 إيقاف / تشغيل البوت" and message.from_user.id == ADMIN_ID:
-        bot_active = not bot_active
-        status = "✅ مفعل" if bot_active else "⛔ متوقف"
-        bot.send_message(message.chat.id, f"حالة البوت الآن: {status}")
+# حظر مستخدم
+def ban_user(message):
+    try:
+        user_id = int(message.text.strip())
+        banned_users.add(user_id)
+        bot.send_message(message.chat.id, f"🚫 تم حظر العضو: {user_id}")
+    except:
+        bot.send_message(message.chat.id, "❌ المعرف غير صحيح.")
 
 # تشغيل البوت
 print("✅ البوت يعمل الآن...")
