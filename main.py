@@ -32,7 +32,7 @@ def generate_buttons(menu_name):
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     markup = generate_buttons("الرئيسية")
-    أهلاًbot.send_message(message.chat.id, "أهلاً بك في البوت التعليمي 🌟") بك في البوت التعليمي 🌟
+bot.send_message(message.chat.id, "أهلاً بك في البوت التعليمي")
 اختر من القائمة:", reply_markup=markup)
 
 @bot.callback_query_handler(func=lambda call: True)
