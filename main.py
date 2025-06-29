@@ -1,4 +1,4 @@
-✅ Telegram Bot Admin Control Panel (Arabic)
+print("✅ Telegram Bot Admin Panel (Arabic)")
 
 import telebot from telebot import types import json
 
