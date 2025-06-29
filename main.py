@@ -4,7 +4,7 @@ import telebot from telebot import types import json
 
 TOKEN = '7670747634:AAHz1_yih0s8DeeiwRNIlNL2GDk9d9fdfpw' ADMIN_ID = 1768016876  # ضع رقم الأدمين هنا bot = telebot.TeleBot(TOKEN)
 
-➕ حالة البوت
+print("➕ حالة البوت")
 
 bot_enabled = True
 
